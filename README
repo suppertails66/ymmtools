@@ -1,0 +1,11 @@
+This is a collection of tools for editing the Mega CD game Yumimi Mix. To build:
+
+$ cd ymm
+$ make
+
+The most important tools are ymm_scenerip (extracts a scene file to its base components) and ymm_scenebuild (builds a scene files from its base components). Example usage:
+
+$ ymm_scenerip FILE.DAT output_folder/FILE/
+$ ymm_scenebuild output_folder/FILE/ FILE.DAT
+
+Though these tools were developed for the Mega CD version, they appear to also work with the game's Saturn port, Yumimi Mix Remix, which uses nearly if not outright identical formats.

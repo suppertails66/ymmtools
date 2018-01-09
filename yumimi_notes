@@ -1,0 +1,217 @@
+219da
+
+General notes:
+  * The game saves VRAM space by combining Plane A and Plane B into a single
+    shared nametable at E000, and showing only the appropriate part of the
+    nametable for each layer by controlling the vertical scrolling. When
+    actual scrolling is needed, it's done "in software" by rewriting
+    the entire plane space every time tile boundaries is crossed.
+
+Code files:
+  MSTART.BIN -- main CPU code
+    * initially loaded somewhere or another, then runs a loader that copies
+      its contents from 0x5E on to FF0190
+  SSTART.BIN -- sub CPU code
+    * PRAM 0x10000
+  RAMINIT.BIN -- RAM init screen
+    * PRAM 0x3F4B0 -- executed at SSTART, 0x100B2
+
+Data files:
+  SEL_INFO.TXT -- plaintext file specifying game progression
+    uses an obtuse symbolic format, with cutscene IDs interspersed with
+    control codes:
+      %     precedes entry point -- after initial bootup, game starts running
+            from here
+      .     usually follows ID number
+              - if no extension follows, use default .DAT extension
+              - if extension follows (e.g. .CUT), use that instead
+      $     independent of any ID: indicates ending, at which point game should
+            go to RAM menu
+      #XX   label. the two following characters are the label name.
+            any character works -- the file starts out using numbers, but runs
+            out of digits and has to go into symbols.
+            should be the only content on the line it appears on
+      >XX   jump to label XX
+      @     ?
+      ?     ?
+    for scenes involving dialogue choices, a sequence of characters, two
+    per option, follows the SEL_INFO entry. these are the label numbers to jump
+    to for each option. NN indicates no jump (processing continues at the next
+    SEL_INFO entry), while Nn indicates the option should cause the current
+    scene to continue.
+  C007.DAT -- intro, いたたたたた
+    - loaded to PRAM 3f4b0
+  
+Program RAM map:
+  D000: SEL_INFO.TXT
+  ABLK stuff:
+    * F021: ?
+    * F022: ?
+    * F15C-F22B: ABLK header (if it exists)
+    * F22C: array of 32-bit pointers to block3 data entries
+    * F32C: ?
+    * F5B4: ? word array
+    * F634: saved stack pointer while interpreter running?
+    * F63C: current byte position in script pointer stack
+    * F63E+: script pointer stack
+      * 16b for up to 4 pointers
+      * 16b for counters corresponding to each of the 4 pointers (pointerpos
+        + 16 = counterpos)
+      - some kind of call stack? op 15 gets the top pointer and executes it
+    * F64E: ?
+    * F65E: pointer to array of script word variables
+    * F67E: current write index into F680
+    * F680: array of pointers to long/dual-word data from script
+    * F6E0: number of tiles loaded to WRAM at ABLK init
+            - can be cleared by opcodes
+    * F6E2: ?
+    * F6E6: highest number of nonzero patterns in _any_ sprite object
+    * F6E8: ?
+    * F6EC: ?
+    * F6EE: spriteObjectsDirty??
+    * F6F0: palettesDirty??
+    * F6F2: xScrollDirty??
+    * F6F4: yScrollDirty??
+    * F6F6: ? related to previous two
+    * F6F8: name of active ABLK?
+    * F700: ?
+    * F704: base index position in ABLK header?
+    * F706: 32-bit ABLK pointer (+4 if actually ABLK and not headerless)
+    * F70A: pointer to local copy of ABLK header data
+    * F712: set just before a file is loaded? cleared by some 02 subop
+    * F714: 32-bit ??? value from ABLK header + base pointer from F706
+    * F718: currently playing PCM absolute header index? 
+    * F71A: ? related to F704??
+    * F71C: ?
+    * F722: ?
+    * F724: ?
+    * F728: ? pointer; data pushed through by op 0F
+    * F72C: ?
+    * F733: ?
+    * F734: ?
+    * F74C: ?
+    * FD3C: ?
+    * FD4E: scratchpad RAM -- when word-length or greater script parameters
+            need to be accessed repeatedly, they're copied here to ensure the
+            correct alignment?
+    * FF48: ?
+    * FF4A: ?
+    * FF4C: ?
+    * FF4E: ?
+  180B0: decompress tilemaps(?) here, 0x2800 bytes apart
+  3F4B0: active ABLK loaded here?
+  
+Word RAM map:
+  3FC00: palettes
+  3FC60: ?
+  3FF08: ?
+  3FF0A: FG virtual x-scroll position
+  3FF0C: BG virtual x-scroll position
+  3FF0E: FG virtual y-scroll position
+  3FF10: BG virtual y-scroll position
+  3FF32: ?
+  3FF38: ?
+  3FF42: ?
+  
+Work RAM map:
+  FF3000: FM driver code -- call this address each frame to update? 
+  FFD900: ? modified by interrupt
+  FFD902: ?
+  FFD904: if nonzero at vblank, indicates presence of pending VDP work
+          cleared by vblank handler after work is done
+  FFD908: VDP mode2 register set command
+  FFD938: ?
+  FFD940: First 4 characters of name of the file graphics were most recently
+          transferred from? (e.g. with main cpu op 14)
+  FFD944-FFD9C3: palettes
+  FFDC56+: VDP command queue -- commands are executed by vblank handler
+           when FFD904 is nonzero
+           format is:
+             * 2b command ID -- entry into jump table at FF0C84 (+4 -- a
+               command of zero marks the end of the command queue)
+ 
+Sub CPU routines:
+  101CA: load and run next ABLK
+  10360: give WRAM ownership to main-cpu
+  10376: wait until sub-cpu has WRAM ownership
+  104A0: run next ABLK
+  11B24: fetch a wordparam
+  
+Main CPU routines:
+  FF0B3A: wait for FFD900 to change its value
+  
+Interrupts:
+  Main:
+    level 2: 86C    (from FFFD12, from 68)
+    level 6: FF0C12 (from FFFD06, from 78)
+  Sub:
+    level 1: 678 (from 5f76)
+    level 2: 60a (from 5f7c)
+      -> jsr ($5F34) -> jmp 138d0
+      - this ends up being in LDPFILE.BIN (loaded to 12C00)
+    level 3: 678 (from 5f82)
+    level 4: 628 (from 5f88)
+    level 5: 64c (from 5f8e)
+    level 6: 660 (from 5f94)
+    levle 7: 678 (from 5f9a)
+  
+ABLK format:
+  4b    "ABLK"
+  4b    header size, inclusive
+  <header>
+    subchunk offsets
+      * If top bit is set, and top nybble is not F, low 24 bits are an
+        offset to PCM data.
+      * If top bit is not set, low 24 bits are a pointer to a subscene.
+        Add 4 to this value to get the actual file offset.
+        Subscenes work exactly like regular scenes (starting from
+        initial palette definition).
+      * If top nybble is F, this is an end-of-list marker. Low 24 bits are
+        a pointer to EOF for convenience of calculating chunk size.
+      - top bit set to indicate valid entry?
+      - if top nybble is F, end-of-list marker (including position for
+        purpose of length calculation)
+      - low 24 bits are file offset 
+      - size is calculated from (next - current)?
+  after header:
+  0x80 bytes: palette
+    split into 0x40 words, which are individually read, multiplied by 2,
+    then copied sequentially to BFC00+ (WRAM 3FC00+).
+    this creates a lookup table of constants(?) used by e.g. opcode 04
+  2b    number of tiles in compressed pattern chunk
+        subtract from 3CB00 to get destination WRAM offset, but if
+        the result is anywhere from 0x1E000-0x1FFFF, it's set to 0x1E000
+  2b    iteration counter for tilemaps -- add 1 to get count
+  2b    number of sprite object entries (_not_ an iteration counter --
+        don't add 1!)
+  <compressed scene pattern data>
+  <compressed background tilemaps>
+    * should always decompress to 0x2800 bytes
+    * the layout of these is flipped horizontally and rotated 90 degrees
+      counterclockwise compared to what the VDP expects
+    * each tile ID indexes into previous chunk of pattern data
+    * size is always 64 * 80 tiles?
+  <sprite object definitions>
+    * processed to position after tilemaps, pointers for each result written
+      to F22C+
+    structs of format:
+      2b default x??
+      2b default y??
+      2b pixel height? shift right 3 bits before use
+      2b pixel width? shift right 3 bits before use
+      *** the previous two entries are, after being right-shifted, multiplied
+          by each other and written to the destination
+          width/height/size?
+      (result of previous multiplication) words:
+        2b tile ID
+          * copy to output
+          * if nonzero, increment a zero-initialized counter
+          * when all copied, write counter to position in output data
+            immediately preceding these words
+  2b filler?
+  1b 0x80 (skipped at start of VM interpreter loop)
+  VM code
+    ...
+
+
+C492B.DAT -- not used? not referenced in SEL_INFO, and script disassembly fails
