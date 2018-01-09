@@ -1,0 +1,413 @@
+================================================================================
+=                             ABLK Opcode Table                                =
+================================================================================
+
+Parameter types:
+  <wordparam>: 2-byte parameter specifier
+    * If first byte is not 0x80, this is a literal word.
+    * If first byte is 0x80, this is a "pointer": the second byte is the index of
+      a word in the array pointed to by F65E.
+    
+
+  00
+    Parameters: none
+    Effect:
+      Terminates script.
+  
+  01
+    Parameters:
+      1b <value>
+    Effect:
+      Writes <value> to F6EC as a word.
+  
+  02
+    Parameters:
+      2b <subop>
+      Additional parameters depending on <subop>:
+        00: none
+        01:
+          2b <dlog x-pos (tiles)>
+          2b <dlog y-pos (tiles)>
+          2b <dlog width (tiles)>
+          2b <dlog height (tiles)>
+        04:
+          2b <?>
+          2b <wordparam?>
+          2b <?>
+        05:
+          2b <?>
+        06:
+          2b <?>
+          2b <?>
+        07:
+          2b <tilemap# wordarray index>
+          2b <targetquadrant wordarray index>
+        09:
+          2b <wordarray index>
+        0A:
+          2b <scriptvar index>
+          2b <scriptvar index>
+        0B:
+          2b <?>
+          2b <?>
+        0E: none
+    Effect:
+      Changes entirely depending on <subop>.
+      00: hardcoded palettes??
+      01: do a dialogue choice? result goes to F65E/scriptvar 0xF?
+      04: ? see C612A.DAT
+      05: ? GFX zoom? see OP_YUMI.DAT
+      06: ? GFX zoom? see OP_YUMI.DAT
+      07: same as loadFgQuadrant, but always takes two scriptvar indices
+      09: play PCM file, always using scriptvar index?
+      0A: loop while two scriptvars not equal? see C127.DAT
+      0B: ? see C117
+      0E: ? see C117
+  
+  03  draw
+    Parameters:
+      1b <delay>
+    Effect:
+      Simple version: redraws screen and waits <delay> frames before continuing?
+      Hard version: does _lots_ of stuff
+  
+  04: setPaletteColors
+    Parameters:
+      1b <startingIndex>
+      VARSIZE <colorList>
+    Effect:
+      * Looks up a starting position in palettes (BFC00) using <startingIndex>.
+      * Until the end-of-opcode marker is reached, words are copied from input,
+        shifted left 1 bit, then written to the next position in the output.
+      * Writes FFFF to F6F0 (signalling CRAM write needed?)
+  
+  05
+    Parameters:
+      1b <param1>
+      1b <param2>
+      VARSIZE
+        1b <?>
+        1b <?>
+    Effect:
+      * Writes (<param1> * 2) to FF4A and <param2> to FF4C?
+      * Clears FF48?
+      * ??? stuff with palettes???
+  
+  06  renderObjsLow?
+    Parameters:
+      VARSIZE <spriteObjIndexBytes>
+    Effect:
+      * While the end of the parameters has not been reached:
+        * Reads a sprite object index from the next parameter byte.
+        * Fetches its corresponding pointer from table F22C.
+        * Fetches word1 and word2 of the sprite object definition.
+        * Calls 10F26 to render sprites(?). D2 is 0x2000 (low priority,
+          palette 1?)
+      * Clears F6E8.
+      * Sets F6EE to FFFF.
+  
+  07  loadFgQuadrant
+    Parameters:
+      1b <tilemapIndex>
+      1b <quadrantSelect>
+    Effect:
+      Loads tilemap with index <tilemapIndex> to FG. <quadrantSelect>
+      determines which quadrant of the tilemap is initially visible:
+        * 00 = top-left
+        * 01 = top-right
+        * 10 = bottom-left
+        * 11 = bottom-right
+    low-level effect:
+      * <tilemapIndex> is used as an index into the table of longs at 1129E,
+        which point to the load positions of the scene's tilemaps. A pointer
+        to the corresponding value from this table is written to F6E2.
+      * FG x- and y- scrolling positions (BFF0A and BFF0E) are zeroed.
+      * If bit 0 of <unk2> is set, FG x (BFF0E) is set to 0x0100.
+      * If bit 1 of <unk2> is set, FG y (BFF0A) is set to 0x0140.
+  
+  08
+    Parameters:
+      (optional) 1b <tilemapIndex>
+    Effect:
+      * If there are no parameters, this functions as a NOP.
+      * If parameters exist, this functions identically to op 09.
+  
+  09  changeFGTilemap?
+    Parameters:
+      (optional) 1b <tilemapIndex>
+    Effect:
+      * If <tilemapIndex> does not exist, then F6E2 (long) and F6F2 (word) are
+        set to -1.
+      * Otherwise, <tilemapIndex> is used as an index into the table of tilemap
+        pointers at 1129E; a pointer to the corresponding value from this table
+        is written to F6E2, and F6F2 is set to -1.
+  
+  0A  renderObjsHigh?
+    Parameters: see op 06
+    Effect:
+      Same as op 06, but D2 is set to 0xA000 instead of 0x2000.
+      High priority sprite objects?
+  
+  0B
+    Parameters: ?
+    Effect: ?
+  
+  0C  setScrollX?
+    Parameters: see op 0E
+    Effect: Same as op 0E, but for X only.
+  
+  0D  setScrollY?
+    Parameters: see op 0E
+    Effect: Same as op 0E, but for Y only.
+  
+  0E  setScroll
+    Parameters:
+        WORDPARAM <x-scroll>
+        WORDPARAM <y-scroll>
+        (optional)
+          2b <x-offset>
+          2b <y-offset>
+          2b <delay>
+          2b <loopcount>
+    Effect:
+      * Sets x-scrolling position to <x-scroll> and y-scrolling position to
+        <y-scroll>. Both FG and BG layers are affected.
+      * If the optional parameters exist, redraws the screen <loopcount> times
+        with a delay of <delay> each time, scrolling the screen by <x-offset>
+        and <y-offset> each time.
+        Short mode:
+          * Unknown. Calls 115BE once.
+        Long mode:
+          * Unknown:
+            * <unk1> is added to <wordparam1>
+            * <unk2> is added to <wordparam2>
+            * <unk3> is parameter D1 to 10B78
+            * <unk4> is a loop counter (stop when zero)
+          * Calls 115BE <unk4> times, adjusting values of <wordparam1> and
+            <wordparam2> each time.
+  
+  0F
+    Parameters:
+      1b <value>
+    Effect:
+      * If <value> is zero, pushes 0x28 through pointer at F728.
+      * If <value> is nonzero, pushes 0x24 through pointer at F728.
+  
+  10  transferPatternData?
+    Parameters: none
+    Effect:
+      Transfers current scene's pattern data (pointer: BFF32) to VRAM 0000.
+        * Under normal conditions, all the pattern data will be transferred.
+          The pattern count in F6E0 is then cleared. If any of the following
+          conditions occur, then exactly 0x200 patterns will be transferred,
+          and the tile count will not be modified:
+          * If more than 0x700 patterns of data exist
+          * If any sprite object defined in the scene uses more than 0x30
+            nonzero patterns
+        * F6F2, F6F4, F6EE, F6F6, and F6F0 are all set to #FFFF.
+  
+  11  scrollFG
+    Parameters: See op 12
+    Effect: Same as op 12, but for foreground.
+  
+  12  scrollBG
+    Parameters:
+      WORDPARAM <x-offset>
+      WORDPARAM <y-offset>
+      (optional)
+        2b <delay>
+        2b <loopcount>
+    Effect:
+      * Scrolls background in x by <x-offset> pixels(?).
+      * Scrolls background in y by <y-offset> pixels(?).
+      * If the optional parameters exist, this scrolling is repeated
+        <loopcount> times, each time redrawing the screen by calling
+        10B78 (part of op 3) with <delay> as a parameter.
+    technical effect just in case:
+      * Adds BFF0C to <unk1> and BFF10 to <unk2>, forming <sum1> and <sum2>,
+        then calls 115BE using those values as parameters D5 and D6, and 0x02
+        as parameter D7.
+      * If the optional parameters exist:
+        * Calls 10B78 (part of op 3) using <unk3> as a parameter?
+        * Decrements <unk4>. If the result is zero, end processing; otherwise:
+          * Adds <unk1> to <sum1> and <unk2> to <sum2>.
+          * Calls 115BE as before.
+        * Loop to start of this section.
+  
+  13  scrollFGBG
+    Parameters:
+      see scrollFG and scrollBG
+    Effect:
+      Scrolls foreground and background simultaneously. Internally, this
+      simply calls the handler for op 11, then op 12, using the same
+      parameters.
+  
+  14:  setLoopStart
+    Parameters:
+      1b <loopcount>
+    Effect:
+      * Pushes current script position onto F63C stack.
+      * Sets the F63C loop counter value to <loopcount>.
+  
+  15:  triggerLoop
+    Parameters: none
+    Effect:
+      * Gets top script position from F63C stack.
+      * Decrements the script's counter. If the counter becomes zero, the
+        stack is popped and nothing else happens.
+        Otherwise, control jumps to that address.
+  
+  16
+    Parameters:
+      WORDPARAM <arg1>
+      WORDPARAM <arg2>
+      (optional)
+        2b <delay>
+        2b <loopcount>
+    Effect:
+      * Executes main CPU op 34 with arg1 and arg2 as parameters.
+      * If the optional parameters exist, repeats this operation <loopcount>
+        times, redrawing the screen with a delay of <delay> each time.
+  
+  17: nop
+    Parameters: none
+    Effect: none
+  
+  18  renderSpriteOverride?
+    Parameters:
+      1b <spriteObjIndex>
+      1b <nametableMask>
+        - if zero, treated as 0x2000
+        - if 1, treated as 0xA000
+        - otherwise, shifted left 8 bits
+      WORDPARAM <xpos = spriteObjWord1Override>
+      WORDPARAM <ypos = spriteObjWord2Override>
+    Effect:
+      Renders(?) a sprite object using the specified parameters in place of
+      any defaults or listed values?
+      <nametableMask> is ORed onto the nametable entry for each generated
+      sprite.
+  
+  
+  
+  1A  playCdTrack?
+    Parameters:
+      1b <tracknum?>
+    Effect:
+      * Plays the CD audio track with the given index?
+  
+  1B  waitForCDD
+    Parameters:
+      2b <mm>
+      2b <ss>
+      2b <FF>
+    Effect:
+      Waits until the CDD's absolute time (as reported by the BIOS CDBSTAT
+      function) exceeds the given minute-second-frame time. If the absolute
+      time does not exceed this value at the time the check is made, the script
+      branches to the most recent loop point defined with setLoopStart.
+      Note that the time is specified with standard integers, not BCD.
+      * Also makes that call that does all the main-cpu commands beforehand.
+  
+  1C  playPCM?
+    Parameters:
+      1b <pcmIndex>
+    Effect:
+      * If <pcmIndex> is 0x80, stops current PCM sound?
+      * Otherwise, plays the embedded PCM sound file with the given <pcmIndex>.
+  
+  1D
+    Parameters: None
+    Effect:
+      possibly waits for current PCM to finish playing, jumping back to most
+      recent loop point until finished??
+      * ??? can break loops???
+  
+  1E  writeWord
+    Parameters:
+      1b <dstindex>
+      WORDPARAM <value>
+    Effect:
+      * Stores <value> to the word at index <dstindex> in table F65E.
+  
+  1F  addWord
+    Parameters:
+      1b <dstindex>
+      WORDPARAM <value>
+    Effect:
+      * Adds <value> to the word at index <dstindex> in table F65E.
+  
+  20  advanceSeq
+    Parameters:
+      1b <dstindex>
+      2b <srcindex>
+      Optional 2b <srcoffset>
+    Effect:
+      This automates the process of continually writing a sequence of data
+      to two script variables. It's probably used as a shortcut for
+      generating a series of x/y positions.
+      In short, the script variables with indices <dstindex> and <dstindex + 1>
+      are updated to the next values in the sequence with index <srcindex>,
+      optionally skipping ahead <srcoffset> values in the source.
+      * <dstindex> is used as an index into the word table at F65E (script
+        variables).
+        The targeted position is <dst>.
+      * <srcindex> is used as an index into the long table at F680 (pointers
+        to data from appendData commands).
+        The pointer at this position becomes <srcpointer>.
+      * If <srcoffset> exists, <srcpointer> is advanced by
+        (<srcoffset * 4>); otherwise, it is left as it is.
+      * If the first byte in *<srcpointer> is 0x80 (end of sequence), nothing
+        happens. Otherwise, 4 bytes are copied from *<srcpointer> to <dst>,
+        and <srcpointer + 4> is written back to its entry in the table
+        at F680.
+  
+  21  addData??
+    Parameters:
+      VARSIZE <longs>
+    Effect:
+      Appends a pointer to the parameters to the table at F680, updating
+      current table write position in F67E. The parameters may consist of
+      any number of longs, terminated with the byte 0x80.
+      * Note: This opcode essentially requires two 0x80 terminators: one
+        for the list of longs and one for the opcode itself.
+  
+  22  playSE??
+    Parameters:
+      1b <value>
+    Effect:
+      * Plays a sound effect??
+  
+  23  playFM??
+    Parameters:
+      1b <value>
+    Effect:
+      * If <value> <= 0x0F, plays the FM track with index <value>.
+      * Otherwise, does something else?
+    low-level effect:
+      * Does nothing if <value> == F734.
+      * Sets F734 to <value>.
+      * Calls main CPU command 30 with #FFFF as parameter.
+      * Calls main CPU command 30 with <value> as parameter.
+  
+  24  nop
+    Parameters: none
+    Effect: none
+  
+  25
+    Parameters:
+      2b <?>
+      2b <?>
+      2b <?>
+    Effect:
+      ?
+      * see C021.DAT
+  
+  26
+    Parameters:
+      2b <?>
+      2b <?>
+    Effect:
+      ?
+      * see C004.DAT
+  

@@ -1,0 +1,135 @@
+================================================================================
+=                             VDP Command Table                                =
+================================================================================
+
+  00
+    Parameters: none
+    Effect:
+      Terminates queue processing.
+  
+  04
+    Parameters: none
+    Effect:
+      Same as op 2C, but using the table at FF0CB8 as the command source.
+      This version transfers a smaller number of bytes.
+          * 94 07 93 3B -- set DMA length to 73B (E76)
+          * 96 DE 95 05 -- set DMA source to 7FDE05 (FFBC0A)
+          * 97 7F
+          * 63 0A       -- trigger DMA: dst = VRAM E30A (plane A area)
+          * 00 83
+          * 63 0A 00 03 -- set up VRAM write: dst = VRAM E30A
+          * 00 FF BC 0A -- pointer; the long at FFBC0A is written to VDP data.
+                           (This writes the first word of input a second time,
+                           the standard workaround for the VDP bug that
+                           causes the first word of certain Mega CD DMA
+                           transfers to sometimes get lost.)
+  
+  08
+    Parameters: none
+    Effect:
+      Same as op 2C, but using the table at FF0CCE as the command source.
+      This version transfers a smaller number of bytes to the plane B area.
+          * 94 07 93 3B -- set DMA length to 73B (E76)
+          * 96 E5 95 45 -- set DMA source to 7FE545 (FFCA8A)
+          * 97 7F
+          * 71 8A       -- trigger DMA: dst = VRAM F18A (plane B area)
+          * 00 83
+          * 71 8A 00 03 -- set up VRAM write: dst = VRAM F18A
+          * 00 FF CA 8A -- pointer; the long at FFCA8A is written to VDP data.
+                           (This writes the first word of input a second time,
+                           the standard workaround for the VDP bug that
+                           causes the first word of certain Mega CD DMA
+                           transfers to sometimes get lost.)
+  
+  0C
+    Parameters: none
+    Effect:
+      * Writes the long at FFD500 to VRAM FC00.
+      * Writes the long at FFDC52 to VSRAM 0000.
+  
+  10
+    Parameters: none
+    Effect:
+      * DMA transfers palettes at FFD944 to CRAM. The full 0x80-byte palette
+        is copied.
+  
+  14
+    Parameters: none
+    Effect:
+      * Retrieves the word at FFDC4C and adds 1. This value is then written to
+        FFD93E.
+      * Quadruples the value derived in the previous step, then sets to this
+        result the DMA length in the table used for the following step.
+      * Executes a tabular DMA (see op 2C) that transfers the sprite attribute
+        table to VDP. The variable-length data at FFD9C4 is written to VRAM
+        E000.
+          * 94 ?? 93 ?? -- set DMA length to a nonconstant value
+          * 96 EC 95 E2 -- set DMA source to 7FECE2 (FFD9C4)
+          * 97 7F
+          * 60 00       -- trigger DMA: dst = VRAM E000 (sprite table)
+          * 00 83
+          * 60 00 00 03 -- set up VRAM write: dst = VRAM E000
+          * 00 FF D9 C4 -- pointer; the long at FFD9C4 is written to VDP data.
+                           (This writes the first word of input a second time,
+                           the standard workaround for the VDP bug that
+                           causes the first word of certain Mega CD DMA
+                           transfers to sometimes get lost.)
+  
+  18
+    Parameters: none
+    Effect: none (immediate RTS)
+  
+  1C
+    Parameters: none
+    Effect: none (immediate RTS)
+  
+  20
+    Parameters:
+      4b DMA source address
+      2b DMA destination VRAM address
+      2b DMA transfer length, pre-halved
+    Effect:
+      * Executes a DMA transfer to VRAM according to the parameters.
+  
+  24 delayedDmaEnable?
+    Parameters: none
+    Effect:
+      * ORs the byte at FFD909 with 0x40. Opposite effect of op 28.
+  
+  28 delayedDmaDisable?
+    Parameters: none
+    Effect:
+      * ANDs the byte at FFD909 with 0xBF. Opposite effect of op 24.
+  
+  2C
+    Parameters: none
+    Effect:
+      * Enables DMA, if not already on, for the duration of this operation.
+      * Reads data from the table at FF0CE4 in RAM (this is prebaked data from
+      MSTART.BIN) and writes it to VDP.
+        The table contains the following values, all but the last of which
+        are written to the VDP verbatim.
+          * 94 0E 93 7B -- set DMA length to E7B (1CF6)
+          * 96 DE 95 05 -- set DMA source to 7FDE05 (FFBC0A)
+          * 97 7F
+          * 63 0A       -- trigger DMA: dst = VRAM E30A (plane A area)
+          * 00 83
+          * 63 0A 00 03 -- set up VRAM write: dst = VRAM E30A
+          * 00 FF BC 0A -- pointer; the long at FFBC0A is written to VDP data.
+                           (This writes the first word of input a second time,
+                           the standard workaround for the VDP bug that
+                           causes the first word of certain Mega CD DMA
+                           transfers to sometimes get lost.)
+  
+  30 -- immediateDmaEnable?
+    Parameters: none
+    Effect:
+      * ORs the word at FFD908 with 0x40. Opposite effect of op 34.
+      * Also writes this updated value to VDP control port.
+  
+  34 -- immediateDmaDisable?
+    Parameters: none
+    Effect:
+      * ANDs the word at FFD908 with 0xFFBF. Opposite effect of op 30.
+      * Also writes this updated value to VDP control port.
+

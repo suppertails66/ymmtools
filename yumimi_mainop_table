@@ -1,0 +1,109 @@
+================================================================================
+=                          Main CPU Command Table                              =
+================================================================================
+
+  00
+    Parameters: none
+    Effect:
+      Gives ownership of WRAM to sub-CPU.
+
+  04
+    Parameters: none
+    Effect:
+      Gives ownership of WRAM to sub-CPU.
+
+  08
+    Parameters: none
+    Effect: none
+
+  0C
+    Parameters: none
+    Effect: none
+
+  10
+    Parameters:
+      2b <??>
+    Effect:
+      * Writes <??> to (A1).
+      * Sets A1 to (0x80,A1).
+
+  14
+    Parameters:
+      2b <size> -- if zero, treat as 0x2000
+    Effect:
+      * ANDs FFD909 with 0xBF (DMA disable??)
+      * Waits for FFD900 to change value (vblank?)
+      * Runs VDP command 0x20 (DMA transfer to VRAM) with parameters:
+        src = 0x23FF32 + 0x200000
+        dst = 0000
+        size = <size>
+      * ORs FFD909 with 0x40 (DMA enable??)
+      * Clears FFD900 and FFD902 (???)
+      * Sets FFD940 to (23FF3C), which contains the first 4 characters of the
+        name of the file that graphics were most recently loaded from.
+        Perhaps for debugging purposes?
+
+  18
+    Parameters: none
+    Effect:
+      * Uploads any pending patterns to VRAM.
+        Pending pattern transfers are stored in a list at 23CB00; entries
+        are of the format:
+          * 2b dst tile index
+          * 2b src tile index (?)
+        The list is terminated by a dst index of 0000.
+        Pattern data start is pointed to by 23FF32.
+      * ??? more pattern copies?
+      * Updates nametable scrolling?
+      * ???
+
+  1C
+    Parameters:
+      (optional) 1b <unk>
+    Effect:
+      * Calls a routine that:
+        * Sets A1 to FFBC00
+        * Adds (A4) to A1
+        * ???
+      * If <unk> does not exist (is 0x80), D0 and A0 are cleared and execution
+        jumps to address 12C10
+      * If <unk> does exist:
+        * F704 is added to <unk>, and the result is written to F718
+        * The modified <unk> is then used to look up an entry in the table of
+          longs pointed to by F15C. Only the low 24 bits of the entry are
+          read.
+          * F706 is added to this value, and F71C is subtracted from it.
+          * This results in a value, <address>. FF is written to <address + 8>.
+          * #FFFF is written to 12C14.
+          * <address + 0x12> is ANDed with 0x7F.
+          * 12C10 is then called as a subroutine.
+
+  20
+    Parameters: none
+    Effect: none
+
+  24
+    Parameters: none
+    Effect:
+      * Waits until FFD902 becomes less than or equal to FFD900
+      
+  28
+    Parameters: none
+    Effect:
+      * ???
+      * Returns (FFD92C & 0xFF00) as a word in communication RAM. This may fail
+        and return nothing (no value written) under some circumstance.
+      
+  30
+    Parameters:
+      1b <value>
+    Effect:
+      * If <value> >= 0x10, calls 0xFF3008 (sound driver API call 2) and clears
+        FFD930
+      * Otherwise:
+        * Uses <value> as an index into the word table at FF0BBE, then adds
+          the value at FF3900 to the looked-up value to form <sndParam>.
+        * Sets FFD930 to #FFFF.
+        * Calls 0xFF3004 (sound driver API call 1) with a parameter
+          of 0xFFFF, then calls 0xFF3004 again with a parameter of <sndParam>.
+
